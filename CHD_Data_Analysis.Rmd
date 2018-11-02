@@ -1,0 +1,100 @@
+---
+title: "Gender Differences in Coronary Heart Disease Incidence"
+author: "Dustin Pluta"
+date: "November 1, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(qwraps2)
+library(tidyverse)
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE)
+dat <- read_csv("dat/chddata_dsi_cleaned.csv")
+```
+
+## Introduction
+
+Coronary Heart Disease (CHD) is a leading killer of adults in the United States.  In order to 
+better understand the risk factors across different subpopulations.  
+
+## Subjects and Methods
+
+```{r table1, results='asis'}
+data_summary <- 
+  list("Total Chol." = 
+         list("min" = ~min(choltot),
+              "max" = ~max(choltot),
+              "mean (sd)" = ~qwraps2::mean_sd(choltot)),
+       "Inc. CHD" = list("% (n)" = ~qwraps2::perc_n(incchd)),
+       "HDL" = 
+         list("min" = ~min(hdl),
+              "max" = ~max(hdl),
+              "mean (sd)" = ~qwraps2::mean_sd(hdl)),
+       "BMI" = 
+         list("min" = ~min(bmi),
+              "max" = ~max(bmi),
+              "mean (sd)" = ~qwraps2::mean_sd(bmi)),
+       "Age" = 
+         list("min" = ~min(age),
+              "median" = ~median(age),
+              "max" = ~max(age)),
+       "sysbp" = 
+         list("min" = ~min(sysbp),
+              "max" = ~max(sysbp),
+              "mean (sd)" = ~qwraps2::mean_sd(sysbp)),
+       "diabp" = 
+         list("min" = ~min(diabp),
+              "max" = ~max(diabp),
+              "mean (sd)" = ~qwraps2::mean_sd(diabp)),
+       "height" = 
+         list("min" = ~min(height),
+              "max" = ~max(height),
+              "mean (sd)" = ~qwraps2::mean_sd(height)),
+       "weight" = 
+         list("min" = ~min(weight),
+              "max" = ~max(weight),
+              "mean (sd)" = ~qwraps2::mean_sd(weight)))
+
+orig_opt <- options()$qwraps2_markup
+options(qwraps2_markup = "markdown")
+summary_table(dat, data_summary)
+```
+
+## Results
+
+```{r bootstrap}
+boot_mean <- function(d, i) {
+  mean(d[i])
+}
+
+dat_booted <- dat %>% 
+  dplyr::group_by(female) %>% 
+  tidyr::nest() %>%  
+  dplyr::mutate(booted = purrr::map(.x = data, 
+                                    ~ boot::boot(data = .x$incchd,
+                                                 statistic = boot_mean,
+                                                 R = 5000,
+                                                 stype = "i"))) %>%
+  dplyr::mutate(booted_ci = purrr::map(.x = booted, 
+                                       ~ boot::boot.ci(.x,
+                                                       conf = 0.95, 
+                                                       type = "bca"))) %>% 
+  dplyr::mutate(statistic = purrr::map(.x = booted_ci, 
+                                       ~ .x$t0), 
+                lower_ci = purrr::map(.x = booted_ci,
+                                      ~ .x$bca[[4]]), 
+                upper_ci = purrr::map(.x = booted_ci,
+                                      ~ .x$bca[[5]])) %>% 
+  dplyr::select(-data, -booted, -booted_ci) %>%
+  tidyr::unnest()
+```
+
+
+```{r, results='asis'}
+knitr::kable(x = dat_booted, digits = 1, col.names = c("Female", "Mean Chol. Total", "Lower 2.5%", "Upper 97.5%"))
+```
+
+
+
+
+
